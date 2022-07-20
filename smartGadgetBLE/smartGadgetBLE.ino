@@ -1,10 +1,11 @@
 #include <ArduinoBLE.h>
 #include <SPI.h>
 #include <WiFiNINA.h>
+#include arduino_secrets.h
 
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
-char ssid[] = "NSA_secret";        // your network SSID (name)
-char pass[] = "schneiderammann1";    // your network password (use for WPA, or use as key for WEP)
+char ssid[] = SECRET_SSID;        // your network SSID (name)
+char pass[] = SECRET_WIFIPASS;    // your network password (use for WPA, or use as key for WEP)
 int keyIndex = 0;            // your network key Index number (needed only for WEP)
 
 //Definitions
@@ -29,14 +30,14 @@ unsigned long bleTimer;
 int status = WL_IDLE_STATUS;
 
 char deviceName[] = "nano33iot-001"; //TODO: Fetch UID from microcontroller
-char server[] = "tinyhousecentral.azurewebsites.net";    //Tiny House Central Azure Function
-char key[] = "ZGmFb8TolVEnayUNaE0pSnycWd-blWQM4L-9o0QrUKynAzFueOUebg==";
+char server[] = SECRET_FUNC_APP;    //URL of Azure Function App
+char key[] = SECRET_KEY; //Key of Azure Function App
 
 //Initialize BLE
 const char* temperatureUuid = "00002234-b38d-4985-720e-0f993a68ee41";
 const char* humidityUuid = "00001234-b38d-4985-720e-0f993a68ee41";
-const char* gadgetBottomAddress = "cb:8f:75:a9:72:9f";
-const char* gadgetTopAddress = "e4:1c:4c:00:d9:24";
+const char* bottomGadgetAddress = "cb:8f:75:a9:72:9f";
+const char* topGadgetAddress = "e4:1c:4c:00:d9:24";
 
 void setup() {
 
@@ -83,7 +84,7 @@ void getSensorData(){
   BLEDevice peripheral;
   
   // start scanning for peripheral
-  BLE.scanForAddress(gadgetTopAddress);
+  BLE.scanForAddress(bottomGadgetAddress);
 
   bleTimer = millis();
   while(millis() < bleTimer + BLE_TIMEOUT){
@@ -102,13 +103,38 @@ void getSensorData(){
       // print the RSSI
       Serial.print("RSSI: ");
       Serial.println(peripheral.rssi());
-      topGadgetRSSI = peripheral.rssi();
+      bottomGadgetRSSI = peripheral.rssi();
 
       if (peripheral.connect()) {
         Serial.println("Connected");
       } else {
         Serial.println("Failed to connect!");
         return;
+      }
+
+      // discover peripheral attributes
+      Serial.println("Discovering attributes ...");
+      if (peripheral.discoverAttributes()) {
+        Serial.println("Attributes discovered");
+      } else {
+        Serial.println("Attribute discovery failed!");
+        peripheral.disconnect();
+        return;
+      }
+  
+      BLEService batteryService = peripheral.service("180f");
+  
+      if (batteryService) {
+        // use the service
+        BLECharacteristic batteryLevelCharacterisic = peripheral.characteristic("2a19");
+  
+        if (batteryLevelCharacterisic) {
+          // use the characteristic
+        } else {
+          Serial.println("Peripheral does NOT have battery level characteristic");
+        }
+      } else {
+        Serial.println("Peripheral does NOT have battery service");
       }
     }
   }
