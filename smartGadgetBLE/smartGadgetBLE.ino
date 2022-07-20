@@ -152,6 +152,8 @@ bool getSensorData(){
           Serial.print("Battery value read: ");
           Serial.println(value);
           bottomGadgetBattery = value;
+          stopBLE(peripheral);
+          return true;
         } else {
           Serial.println("Peripheral does NOT have battery level characteristic");
           stopBLE(peripheral);
@@ -167,7 +169,7 @@ bool getSensorData(){
 
   //Make sure BLE connection is closed before using WIFI
   stopBLE(peripheral);
-  return true;
+  return false; //Should never happen
 }
 
 
