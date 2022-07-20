@@ -3,8 +3,8 @@
 #include <WiFiNINA.h>
 
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
-char ssid[] = "tinyhouse";        // your network SSID (name)
-char pass[] = "unterdemweidenbaum";    // your network password (use for WPA, or use as key for WEP)
+char ssid[] = "NSA_secret";        // your network SSID (name)
+char pass[] = "schneiderammann1";    // your network password (use for WPA, or use as key for WEP)
 int keyIndex = 0;            // your network key Index number (needed only for WEP)
 
 //Definitions
@@ -20,6 +20,8 @@ int humidityBottom = 50;
 int co2Top = 400; //ppm
 int bottomGadgetRSSI = 0;
 int bottomGadgetBattery = -1;
+int topGadgetRSSI = 0;
+int topGadgetBattery = -1;
 unsigned long delayTimer;
 unsigned long txTimer;
 unsigned long bleTimer;
@@ -34,10 +36,11 @@ char key[] = "ZGmFb8TolVEnayUNaE0pSnycWd-blWQM4L-9o0QrUKynAzFueOUebg==";
 const char* temperatureUuid = "00002234-b38d-4985-720e-0f993a68ee41";
 const char* humidityUuid = "00001234-b38d-4985-720e-0f993a68ee41";
 const char* gadgetBottomAddress = "cb:8f:75:a9:72:9f";
+const char* gadgetTopAddress = "e4:1c:4c:00:d9:24";
 
 void setup() {
 
-  Serial.begin(1000000);
+  Serial.begin(115200);
   while (!Serial); //Wait for Serial to connect
 
   if (WiFi.status() == WL_NO_MODULE) {
@@ -80,14 +83,15 @@ void getSensorData(){
   BLEDevice peripheral;
   
   // start scanning for peripheral
-  BLE.scanForAddress(gadgetBottomAddress);
+  BLE.scanForAddress(gadgetTopAddress);
 
   bleTimer = millis();
   while(millis() < bleTimer + BLE_TIMEOUT){
-    BLEDevice peripheral = BLE.available();
+    peripheral = BLE.available();
 
     if (peripheral) {
       // discovered a peripheral
+      BLE.stopScan();
       Serial.println("Peripheral found");
       Serial.println("-----------------------");
   
@@ -95,34 +99,16 @@ void getSensorData(){
       Serial.print("Address: ");
       Serial.println(peripheral.address());
   
-      // print the local name, if present
-      if (peripheral.hasLocalName()) {
-        Serial.print("Local Name: ");
-        Serial.println(peripheral.localName());
-      }
-  
       // print the RSSI
       Serial.print("RSSI: ");
       Serial.println(peripheral.rssi());
-      bottomGadgetRSSI = peripheral.rssi();
-  
-      BLEService batteryService = peripheral.service("180f");
-      delay(10);
-      if (batteryService) {
-        BLECharacteristic batteryLevelCharacteristic = peripheral.characteristic("2a19");
-        delay(10);
-        if (batteryLevelCharacteristic) {
-          byte battery;
-          batteryLevelCharacteristic.readValue(battery);
-          Serial.print("Battery level read: ");
-          Serial.println(battery);
-        } else {
-          Serial.println("Peripheral does NOT have battery level characteristic");
-          bottomGadgetBattery = -1;
-        }
+      topGadgetRSSI = peripheral.rssi();
+
+      if (peripheral.connect()) {
+        Serial.println("Connected");
       } else {
-        Serial.println("Peripheral does NOT have battery service");
-        bottomGadgetBattery = -1;
+        Serial.println("Failed to connect!");
+        return;
       }
     }
   }
