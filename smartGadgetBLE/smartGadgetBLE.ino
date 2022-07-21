@@ -10,16 +10,17 @@ int keyIndex = 0;            // your network key Index number (needed only for W
 
 //Definitions
 #define HTTP_TIMEOUT 10000 //ms
-#define TX_INTERVAL 60000 //ms
+#define TX_INTERVAL 300000 //ms
 #define BLE_TIMEOUT 20000 //ms
+#define WIFI_TIMEOUT 60000 //ms
 
 // Global variables for humidity and temperature fetched
 bool top_update = false;
 bool bottom_update = false;
 float temperatureTop = 255;
-int humidityTop = -1;
+float humidityTop = -1;
 float temperatureBottom = 255;
-int humidityBottom = -1;
+float humidityBottom = -1;
 int bottomGadgetRSSI = 127;
 int bottomGadgetBattery = -1;
 int topGadgetRSSI = 127;
@@ -27,6 +28,7 @@ int topGadgetBattery = -1;
 unsigned long delayTimer;
 unsigned long txTimer;
 unsigned long bleTimer;
+unsigned long wifiTimer;
 
 int status = WL_IDLE_STATUS;
 
@@ -36,11 +38,11 @@ char key[] = SECRET_KEY; //Key of Azure Function App
 
 //Initialize BLE
 #define BLE_UUID_BATTERY_SERVICE          "180F"
-#define BLE_UUID_BATTERY_LEVEL            "2A19"
-#define BLE_UUID_TEMP_SERVICE             "2234"   
-#define BLE_UUID_TEMP                     "2235"
-#define BLE_UUID_HUM_SERVICE              "1234"
-#define BLE_UUID_HUM                      "1235"
+#define BLE_UUID_BATTERY                  "2A19"
+#define BLE_UUID_TEMP_SERVICE             "00002234-B38D-4985-720E-0F993A68EE41"   
+#define BLE_UUID_TEMP                     "00002235-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_HUM_SERVICE              "00001234-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_HUM                      "00001235-B38D-4985-720E-0F993A68EE41"
 
 //Used devices
 #define BOTTOM_GADGET                     "cb:8f:75:a9:72:9f"
@@ -65,24 +67,26 @@ void setup() {
   Serial.println("Setup finished");
 }
 
+float byteBuffer2float(byte buf[4]){
+  float y;
+  uint32_t* const py = (uint32_t*) &y;
+  *py = ((uint32_t) buf[3] << 24) |
+        ((uint32_t) buf[2] << 16) |
+        ((uint32_t) buf[1] << 8) |
+        ((uint32_t) buf[0] << 0);
+  return y;
+}
+
 void loop() {
 
   txTimer = millis();
   getSensorData();
-  connectToWifi();
-  sendSensorData();
+  if(connectToWifi()){
+    sendSensorData();
+  }
   while(millis() < txTimer + TX_INTERVAL){
     delay(10);
   }
-}
-
-void stopBLE(BLEDevice peripheral){
-  Serial.println("Stopping BLE Service");
-  BLE.stopScan();
-  if(peripheral){
-    peripheral.disconnect();
-  }
-  BLE.end();
 }
 
 //Reads value from given service and characteristic
@@ -114,8 +118,37 @@ bool bleReadInt(BLEDevice peripheral, char serviceUuid[], char charUuid[], int *
       }
 }
 
+//Reads value from given service and characteristic
+bool bleReadFloat(BLEDevice peripheral, char serviceUuid[], char charUuid[], float *val){
+      BLEService bleService = peripheral.service(serviceUuid);
+
+      if (bleService) {
+        Serial.print("BLE Service found: ");
+        Serial.println(serviceUuid);
+        BLECharacteristic bleCharacteristic = peripheral.characteristic(charUuid);
+        if (bleCharacteristic) {
+          Serial.print("BLE Characteristic found: ");
+          Serial.println(charUuid);
+          byte buf[4];
+          bleCharacteristic.readValue(buf, 4);
+          *val = byteBuffer2float(buf);
+          Serial.print("Value read: ");
+          Serial.println(*val);
+          return true;
+        } else {
+          Serial.print("Error - characteristic not found: ");
+          Serial.println(charUuid);
+          return false;
+        }
+      } else {
+        Serial.print("Error - service not found: ");
+        Serial.println(serviceUuid);
+        return false;
+      }
+}
+
 //Handles connection to one SHT gadget and readout of data, will fill the data into resp. variables
-bool getSHTData(char addr[], float *temp, int *hum, int *sig, int *batt){
+bool getSHTData(char addr[], float *temp, float *hum, int *sig, int *batt){
   Serial.println("- Discovering peripheral device...");
 
   BLEDevice peripheral;
@@ -144,7 +177,7 @@ bool getSHTData(char addr[], float *temp, int *hum, int *sig, int *batt){
         Serial.println("Connected");
       } else {
         Serial.println("Failed to connect!");
-        stopBLE(peripheral);
+        peripheral.disconnect();
         return false;
       }
 
@@ -156,28 +189,30 @@ bool getSHTData(char addr[], float *temp, int *hum, int *sig, int *batt){
         Serial.println("Attributes discovered");
       } else {
         Serial.println("Attribute discovery failed!");
-        stopBLE(peripheral);
+        peripheral.disconnect();
         return false;
       }
 
       delay(100);
-      if(bleReadInt()){
-        
+      
+      if(bleReadInt(peripheral, BLE_UUID_BATTERY_SERVICE, BLE_UUID_BATTERY, batt) &
+         bleReadFloat(peripheral, BLE_UUID_TEMP_SERVICE, BLE_UUID_TEMP, temp) & 
+         bleReadFloat(peripheral, BLE_UUID_HUM_SERVICE, BLE_UUID_HUM, hum)){
+        peripheral.disconnect();
+        return true;
       }
-  
-
     }
   }
 
   //Make sure BLE connection is closed before using WIFI
-  stopBLE(peripheral);
-  return false; //Should never happen
+  peripheral.disconnect();
+  return false;
 }
 
 
 void getSensorData(){
   //Get data from all sensor
-
+  WiFi.end();
   Serial.println("Starting up BLE module");
   //Setup for BLE
   if (!BLE.begin()) {
@@ -193,6 +228,8 @@ void getSensorData(){
   if (getSHTData(BOTTOM_GADGET, &temperatureBottom, &humidityBottom, &bottomGadgetRSSI, &bottomGadgetBattery)){
     bottom_update = true;
   }
+
+  BLE.end();
 }
 
 
@@ -267,26 +304,40 @@ void sendSensorData(){
     bottom_update = false;
     top_update = false;
   }
+  WiFi.end();
 }
 
-void connectToWifi(){
+bool connectToWifi(){
   // attempt to connect to WiFi network:
   BLE.end();
-
+  delay(50);
   // Re-initialize the WiFi driver
   // This is currently necessary to switch from BLE to WiFi
   wiFiDrv.wifiDriverDeinit();
   wiFiDrv.wifiDriverInit();
-  
+  status = 0;
+
+  wifiTimer = millis();
   while (status != WL_CONNECTED) {
+    delay(50);
     Serial.print("Attempting to connect to SSID: ");
     Serial.println(ssid);
     // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
     status = WiFi.begin(ssid, pass);
+    Serial.print("Wifi status: ");
+    Serial.println(status);
     delay(1000);
     printWiFiStatus();
-    // wait 10 seconds for connection:
-    delay(10000);
+    if(status == WL_CONNECTED) {
+      delay(10000); //Wait for connection
+      return true;
+    }
+    else if(millis() > wifiTimer + WIFI_TIMEOUT){
+      Serial.println("WIFI Timeout reached");
+      return false;
+    }
+    wiFiDrv.wifiDriverDeinit();
+    wiFiDrv.wifiDriverInit();
   }
 }
 
