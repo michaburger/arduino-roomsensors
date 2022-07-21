@@ -14,12 +14,12 @@ int keyIndex = 0;            // your network key Index number (needed only for W
 #define BLE_TIMEOUT 20000 //ms
 
 // Global variables for humidity and temperature fetched
-bool ble_updated = false;
-float temperatureTop = 25.6;
-int humidityTop = 54;
-float temperatureBottom = 23.3;
-int humidityBottom = 50;
-int co2Top = 400; //ppm
+bool top_update = false;
+bool bottom_update = false;
+float temperatureTop = 255;
+int humidityTop = -1;
+float temperatureBottom = 255;
+int humidityBottom = -1;
 int bottomGadgetRSSI = 127;
 int bottomGadgetBattery = -1;
 int topGadgetRSSI = 127;
@@ -36,15 +36,15 @@ char key[] = SECRET_KEY; //Key of Azure Function App
 
 //Initialize BLE
 #define BLE_UUID_BATTERY_SERVICE          "180F"
-#define BLE_UUID_BATTERY_LEVEL            "2A19" //"00002A19-0000-1000-8000-00805F9B34FB"
-#define BLE_UUID_TEMP_SERVICE             "00002234-b38d-4985-720e-0f993a68ee41"   
-#define BLE_UUID_TEMP                     "00002235-b38d-4985-720e-0f993a68ee41"
-#define BLE_UUID_HUM_SERVICE              "00001234-b38d-4985-720e-0f993a68ee41"
-#define BLE_UUID_HUM                      "00001235-b38d-4985-720e-0f993a68ee41"
+#define BLE_UUID_BATTERY_LEVEL            "2A19"
+#define BLE_UUID_TEMP_SERVICE             "2234"   
+#define BLE_UUID_TEMP                     "2235"
+#define BLE_UUID_HUM_SERVICE              "1234"
+#define BLE_UUID_HUM                      "1235"
 
 //Used devices
-const char* BOTTOM_GADGET = "cb:8f:75:a9:72:9f";
-const char* TOP_GADGET = "e4:1c:4c:00:d9:24";
+#define BOTTOM_GADGET                     "cb:8f:75:a9:72:9f"
+#define TOP_GADGET                        "e4:1c:4c:00:d9:24"
 
 void setup() {
 
@@ -68,7 +68,7 @@ void setup() {
 void loop() {
 
   txTimer = millis();
-  ble_updated = getSensorData();
+  getSensorData();
   connectToWifi();
   sendSensorData();
   while(millis() < txTimer + TX_INTERVAL){
@@ -85,22 +85,41 @@ void stopBLE(BLEDevice peripheral){
   BLE.end();
 }
 
+//Reads value from given service and characteristic
+bool bleReadInt(BLEDevice peripheral, char serviceUuid[], char charUuid[], int *val){
+      BLEService bleService = peripheral.service(serviceUuid);
 
-bool getSensorData(){
-  //Get sensor data from BLE Gadget
+      if (bleService) {
+        Serial.print("BLE Service found: ");
+        Serial.println(serviceUuid);
+        BLECharacteristic bleCharacteristic = peripheral.characteristic(charUuid);
+        if (bleCharacteristic) {
+          Serial.print("BLE Characteristic found: ");
+          Serial.println(charUuid);
+          byte v;
+          bleCharacteristic.readValue(v);
+          Serial.print("Value read: ");
+          Serial.println(v);
+          *val = (int)v;
+          return true;
+        } else {
+          Serial.print("Error - characteristic not found: ");
+          Serial.println(charUuid);
+          return false;
+        }
+      } else {
+        Serial.print("Error - service not found: ");
+        Serial.println(serviceUuid);
+        return false;
+      }
+}
 
-  Serial.println("Starting up BLE module");
-  //Setup for BLE
-  if (!BLE.begin()) {
-    Serial.println("* Starting Bluetooth® Low Energy module failed!");
-  }
-
+//Handles connection to one SHT gadget and readout of data, will fill the data into resp. variables
+bool getSHTData(char addr[], float *temp, int *hum, int *sig, int *batt){
   Serial.println("- Discovering peripheral device...");
 
   BLEDevice peripheral;
-  
-  // start scanning for peripheral
-  BLE.scanForAddress(BOTTOM_GADGET);
+  BLE.scanForAddress(addr);
 
   bleTimer = millis();
   while(millis() < bleTimer + BLE_TIMEOUT){
@@ -119,7 +138,7 @@ bool getSensorData(){
       // print the RSSI
       Serial.print("RSSI: ");
       Serial.println(peripheral.rssi());
-      bottomGadgetRSSI = peripheral.rssi();
+      *sig = peripheral.rssi();
       
       if (peripheral.connect()) {
         Serial.println("Connected");
@@ -129,7 +148,7 @@ bool getSensorData(){
         return false;
       }
 
-      delay(50); //Sometimes attribute discovery fails without waiting here
+      delay(100); //Sometimes attribute discovery fails without waiting here
       
       // discover peripheral attributes
       Serial.println("Discovering attributes ...");
@@ -140,36 +159,40 @@ bool getSensorData(){
         stopBLE(peripheral);
         return false;
       }
-  
-      BLEService batteryService = peripheral.service(BLE_UUID_BATTERY_SERVICE);
 
-      if (batteryService) {
-        BLECharacteristic batteryLevelCharacteristic = peripheral.characteristic(BLE_UUID_BATTERY_LEVEL);
-        Serial.println("Battery Service found");
-        if (batteryLevelCharacteristic) {
-          byte value = 0;
-          batteryLevelCharacteristic.readValue(value);
-          Serial.print("Battery value read: ");
-          Serial.println(value);
-          bottomGadgetBattery = value;
-          stopBLE(peripheral);
-          return true;
-        } else {
-          Serial.println("Peripheral does NOT have battery level characteristic");
-          stopBLE(peripheral);
-          return false;
-        }
-      } else {
-        Serial.println("Peripheral does NOT have battery service");
-        stopBLE(peripheral);
-        return false;
+      delay(100);
+      if(bleReadInt()){
+        
       }
+  
+
     }
   }
 
   //Make sure BLE connection is closed before using WIFI
   stopBLE(peripheral);
   return false; //Should never happen
+}
+
+
+void getSensorData(){
+  //Get data from all sensor
+
+  Serial.println("Starting up BLE module");
+  //Setup for BLE
+  if (!BLE.begin()) {
+    Serial.println("* Starting Bluetooth® Low Energy module failed!");
+  }
+
+  //Read top Gadget
+  if (getSHTData(TOP_GADGET, &temperatureTop, &humidityTop, &topGadgetRSSI, &topGadgetBattery)){
+    top_update = true;
+  }
+
+  //Read bottom Gadget
+  if (getSHTData(BOTTOM_GADGET, &temperatureBottom, &humidityBottom, &bottomGadgetRSSI, &bottomGadgetBattery)){
+    bottom_update = true;
+  }
 }
 
 
@@ -185,27 +208,25 @@ void sendSensorData(){
     client.print(key);
     client.print("&deviceName=");
     client.print(deviceName);
-    client.print("&sensorUpdate=");
-    client.print(ble_updated);
-    if(ble_updated){
+    if(top_update){
       client.print("&batteryTop=");
       client.print(topGadgetBattery);
-      client.print("&batteryBottom=");
-      client.print(bottomGadgetBattery);
       client.print("&rssiTop=");
       client.print(topGadgetRSSI);
-      client.print("&rssiBottom=");
-      client.print(bottomGadgetRSSI);
       client.print("&temperatureTop=");
       client.print(temperatureTop);
-      client.print("&temperatureBottom=");
-      client.print(temperatureBottom);
       client.print("&humidityTop=");
       client.print(humidityTop);
+    }
+    if(bottom_update){
+      client.print("&batteryBottom=");
+      client.print(bottomGadgetBattery);
+      client.print("&rssiBottom=");
+      client.print(bottomGadgetRSSI);
+      client.print("&temperatureBottom=");
+      client.print(temperatureBottom);
       client.print("&humidityBottom=");
       client.print(humidityBottom);
-      client.print("&co2Top=");
-      client.print(co2Top);
     }
     //Hum and temp fields go here afterwards, separated by "&"
     client.println(" HTTP/1.1");
@@ -231,7 +252,9 @@ void sendSensorData(){
   }
 
   //Read answer from server but do not consider for this program
+  bool server_answer = false;
   while (client.available()) {
+    server_answer = true;
     char c = client.read();
     Serial.write(c);
   }
@@ -239,6 +262,11 @@ void sendSensorData(){
   //Disconnect
   client.stop();
   Serial.println("Client disconnected");
+
+  if(server_answer){
+    bottom_update = false;
+    top_update = false;
+  }
 }
 
 void connectToWifi(){
