@@ -51,7 +51,7 @@ char key[] = SECRET_KEY; //Key of Azure Function App
 void setup() {
 
   Serial.begin(115200);
-  while (!Serial); //Wait for Serial to connect
+  //while (!Serial); //Wait for Serial to connect
 
   if (WiFi.status() == WL_NO_MODULE) {
     Serial.println("Communication with WiFi module failed!");
