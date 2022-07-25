@@ -43,6 +43,8 @@ char key[] = SECRET_KEY; //Key of Azure Function App
 #define BLE_UUID_TEMP                     "00002235-B38D-4985-720E-0F993A68EE41"
 #define BLE_UUID_HUM_SERVICE              "00001234-B38D-4985-720E-0F993A68EE41"
 #define BLE_UUID_HUM                      "00001235-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_CO2_SERVICE              "00007000-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_CO2                      "00007001-B38D-4985-720E-0F993A68EE41"
 
 //Used devices
 #define BOTTOM_GADGET                     "cb:8f:75:a9:72:9f"
