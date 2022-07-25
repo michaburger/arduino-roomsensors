@@ -10,7 +10,7 @@ int keyIndex = 0;            // your network key Index number (needed only for W
 
 //Definitions
 #define HTTP_TIMEOUT 10000 //ms
-#define TX_INTERVAL 300000 //ms
+#define TX_INTERVAL 60000 //ms
 #define BLE_TIMEOUT 20000 //ms
 #define WIFI_TIMEOUT 60000 //ms
 
@@ -18,7 +18,7 @@ int keyIndex = 0;            // your network key Index number (needed only for W
 bool top_update = false;
 bool bottom_update = false;
 bool co2_update = false;
-bool voc_update = false
+bool voc_update = false;
 float temperatureTop = 255;
 float humidityTop = -1;
 float temperatureBottom = 255;
@@ -29,8 +29,10 @@ int topGadgetRSSI = 127;
 int topGadgetBattery = -1;
 float temperatureBedroom = 255;
 float humidityBedroom = -1;
+int co2RSSI = 127;
+int vocRSSI = 127;
 int co2Bedroom = -1;
-int voc = -1;
+int vocBathroom = -1;
 unsigned long delayTimer;
 unsigned long txTimer;
 unsigned long bleTimer;
@@ -51,8 +53,8 @@ char key[] = SECRET_KEY; //Key of Azure Function App
 #define BLE_UUID_HUM                      "00001235-B38D-4985-720E-0F993A68EE41"
 #define BLE_UUID_CO2_SERVICE              "00007000-B38D-4985-720E-0F993A68EE41"
 #define BLE_UUID_CO2                      "00007001-B38D-4985-720E-0F993A68EE41"
-#define BLE_UUID_VOC_SERVICE              "00005586-B38D-4985-720E-0F993A68EE41"
-#define BLE_UUID_VOC_SERVICE              "00005582-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_VOC_SERVICE              "00005588-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_VOC                      "00005582-B38D-4985-720E-0F993A68EE41"
 
 //Used devices
 #define BOTTOM_GADGET                     "cb:8f:75:a9:72:9f"
@@ -63,7 +65,8 @@ char key[] = SECRET_KEY; //Key of Azure Function App
 void setup() {
 
   Serial.begin(115200);
-  //while (!Serial); //Wait for Serial to connect
+  //Waiting to connect on Serial
+  //while (!Serial); //Leave commented to run on power supply
 
   if (WiFi.status() == WL_NO_MODULE) {
     Serial.println("Communication with WiFi module failed!");
@@ -87,6 +90,12 @@ float byteBuffer2float(byte buf[4]){
         ((uint32_t) buf[1] << 8) |
         ((uint32_t) buf[0] << 0);
   return y;
+}
+
+float byteBuffer2int16(byte buf[2]){
+  int msb = buf[1];
+  int lsb = buf[0];
+  return (msb<<8)+lsb;
 }
 
 void loop() {
@@ -131,6 +140,35 @@ bool bleReadInt(BLEDevice peripheral, char serviceUuid[], char charUuid[], int *
 }
 
 //Reads value from given service and characteristic
+bool bleReadInt16(BLEDevice peripheral, char serviceUuid[], char charUuid[], int *val){
+      BLEService bleService = peripheral.service(serviceUuid);
+
+      if (bleService) {
+        Serial.print("BLE Service found: ");
+        Serial.println(serviceUuid);
+        BLECharacteristic bleCharacteristic = peripheral.characteristic(charUuid);
+        if (bleCharacteristic) {
+          Serial.print("BLE Characteristic found: ");
+          Serial.println(charUuid);
+          byte buf[2];
+          bleCharacteristic.readValue(buf, 2);
+          *val = byteBuffer2int16(buf);
+          Serial.print("Value read: ");
+          Serial.println(*val);
+          return true;
+        } else {
+          Serial.print("Error - characteristic not found: ");
+          Serial.println(charUuid);
+          return false;
+        }
+      } else {
+        Serial.print("Error - service not found: ");
+        Serial.println(serviceUuid);
+        return false;
+      }
+}
+
+//Reads value from given service and characteristic
 bool bleReadFloat(BLEDevice peripheral, char serviceUuid[], char charUuid[], float *val){
       BLEService bleService = peripheral.service(serviceUuid);
 
@@ -157,6 +195,128 @@ bool bleReadFloat(BLEDevice peripheral, char serviceUuid[], char charUuid[], flo
         Serial.println(serviceUuid);
         return false;
       }
+}
+
+//Handles connection to the CO2 gadget
+bool getCO2Data(char addr[], int *sig, float *temp, float *hum, int *co2){
+  Serial.println("- Discovering peripheral device...");
+
+  BLEDevice peripheral;
+  BLE.scanForAddress(addr);
+
+  bleTimer = millis();
+  while(millis() < bleTimer + BLE_TIMEOUT){
+    peripheral = BLE.available();
+
+    if (peripheral) {
+      // discovered a peripheral
+      BLE.stopScan(); //Stop scanning (keeps module busy)
+      Serial.println("Peripheral found");
+      Serial.println("-----------------------");
+  
+      // print address
+      Serial.print("Address: ");
+      Serial.println(peripheral.address());
+  
+      // print the RSSI
+      Serial.print("RSSI: ");
+      Serial.println(peripheral.rssi());
+      *sig = peripheral.rssi();
+      
+      if (peripheral.connect()) {
+        Serial.println("Connected");
+      } else {
+        Serial.println("Failed to connect!");
+        peripheral.disconnect();
+        return false;
+      }
+
+      delay(100); //Sometimes attribute discovery fails without waiting here
+      
+      // discover peripheral attributes
+      Serial.println("Discovering attributes ...");
+      if (peripheral.discoverAttributes()) {
+        Serial.println("Attributes discovered");
+      } else {
+        Serial.println("Attribute discovery failed!");
+        peripheral.disconnect();
+        return false;
+      }
+
+      delay(100);
+      
+      if(bleReadInt16(peripheral, BLE_UUID_CO2_SERVICE, BLE_UUID_CO2, co2) &
+         bleReadFloat(peripheral, BLE_UUID_TEMP_SERVICE, BLE_UUID_TEMP, temp) & 
+         bleReadFloat(peripheral, BLE_UUID_HUM_SERVICE, BLE_UUID_HUM, hum)){
+        peripheral.disconnect();
+        return true;
+      }
+    }
+  }
+
+  //Make sure BLE connection is closed before using WIFI
+  peripheral.disconnect();
+  return false;
+}
+
+//Handles connection to the TVOC gadget
+bool getVOCData(char addr[], int *sig, int *voc){
+  Serial.println("- Discovering peripheral device...");
+
+  BLEDevice peripheral;
+  BLE.scanForAddress(addr);
+
+  bleTimer = millis();
+  while(millis() < bleTimer + BLE_TIMEOUT){
+    peripheral = BLE.available();
+
+    if (peripheral) {
+      // discovered a peripheral
+      BLE.stopScan(); //Stop scanning (keeps module busy)
+      Serial.println("Peripheral found");
+      Serial.println("-----------------------");
+  
+      // print address
+      Serial.print("Address: ");
+      Serial.println(peripheral.address());
+  
+      // print the RSSI
+      Serial.print("RSSI: ");
+      Serial.println(peripheral.rssi());
+      *sig = peripheral.rssi();
+      
+      if (peripheral.connect()) {
+        Serial.println("Connected");
+      } else {
+        Serial.println("Failed to connect!");
+        peripheral.disconnect();
+        return false;
+      }
+
+      delay(100); //Sometimes attribute discovery fails without waiting here
+
+      // discover peripheral attributes
+      Serial.println("Discovering attributes ...");
+      if (peripheral.discoverAttributes()) {
+        Serial.println("Attributes discovered");
+      } else {
+        Serial.println("Attribute discovery failed!");
+        peripheral.disconnect();
+        return false;
+      }
+
+      delay(100);
+      
+      if(bleReadInt(peripheral, BLE_UUID_VOC_SERVICE, BLE_UUID_VOC, voc)){
+        peripheral.disconnect();
+        return true;
+      }
+    }
+  }
+
+  //Make sure BLE connection is closed before using WIFI
+  peripheral.disconnect();
+  return false;
 }
 
 //Handles connection to one SHT gadget and readout of data, will fill the data into resp. variables
@@ -241,6 +401,18 @@ void getSensorData(){
     bottom_update = true;
   }
 
+  //Read CO2 Gadget
+  if (getCO2Data(CO2_GADGET, &co2RSSI, &temperatureBedroom, &humidityBedroom, &co2Bedroom)){
+    co2_update = true;
+  }
+
+/*
+  //Read VOC Gadget
+  if (getVOCData(VOC_GADGET, &vocRSSI, &vocBathroom)){
+    voc_update = true;
+  }
+*/
+
   BLE.end();
 }
 
@@ -276,6 +448,22 @@ void sendSensorData(){
       client.print(temperatureBottom);
       client.print("&humidityBottom=");
       client.print(humidityBottom);
+    }
+    if(co2_update){
+      client.print("&temperatureBedroom=");
+      client.print(temperatureBedroom);
+      client.print("&co2RSSI=");
+      client.print(co2RSSI);
+      client.print("&humidityBedroom=");
+      client.print(humidityBedroom);
+      client.print("&co2Bedroom=");
+      client.print(co2Bedroom);
+    }
+    if(voc_update){
+      client.print("&vocBathroom=");
+      client.print(vocBathroom);
+      client.print("&vocRSSI=");
+      client.print(vocRSSI);
     }
     //Hum and temp fields go here afterwards, separated by "&"
     client.println(" HTTP/1.1");
@@ -315,6 +503,8 @@ void sendSensorData(){
   if(server_answer){
     bottom_update = false;
     top_update = false;
+    co2_update = false;
+    voc_update = false;
   }
   WiFi.end();
 }
