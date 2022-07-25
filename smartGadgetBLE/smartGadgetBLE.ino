@@ -17,6 +17,8 @@ int keyIndex = 0;            // your network key Index number (needed only for W
 // Global variables for humidity and temperature fetched
 bool top_update = false;
 bool bottom_update = false;
+bool co2_update = false;
+bool voc_update = false
 float temperatureTop = 255;
 float humidityTop = -1;
 float temperatureBottom = 255;
@@ -25,6 +27,10 @@ int bottomGadgetRSSI = 127;
 int bottomGadgetBattery = -1;
 int topGadgetRSSI = 127;
 int topGadgetBattery = -1;
+float temperatureBedroom = 255;
+float humidityBedroom = -1;
+int co2Bedroom = -1;
+int voc = -1;
 unsigned long delayTimer;
 unsigned long txTimer;
 unsigned long bleTimer;
@@ -45,10 +51,14 @@ char key[] = SECRET_KEY; //Key of Azure Function App
 #define BLE_UUID_HUM                      "00001235-B38D-4985-720E-0F993A68EE41"
 #define BLE_UUID_CO2_SERVICE              "00007000-B38D-4985-720E-0F993A68EE41"
 #define BLE_UUID_CO2                      "00007001-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_VOC_SERVICE              "00005586-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_VOC_SERVICE              "00005582-B38D-4985-720E-0F993A68EE41"
 
 //Used devices
 #define BOTTOM_GADGET                     "cb:8f:75:a9:72:9f"
 #define TOP_GADGET                        "e4:1c:4c:00:d9:24"
+#define VOC_GADGET                        "e9:da:d0:6c:09:bf"
+#define CO2_GADGET                        "dc:e6:4d:5e:e1:f6"
 
 void setup() {
 
