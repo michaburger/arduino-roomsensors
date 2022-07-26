@@ -27,10 +27,10 @@ int bottomGadgetRSSI = 127;
 int bottomGadgetBattery = -1;
 int topGadgetRSSI = 127;
 int topGadgetBattery = -1;
-float temperatureBedroom = 255;
-float humidityBedroom = -1;
 int co2RSSI = 127;
 int vocRSSI = 127;
+float temperatureBathroom = 255;
+float humidityBathroom = -1;
 int co2Bedroom = -1;
 int vocBathroom = -1;
 unsigned long delayTimer;
@@ -198,7 +198,7 @@ bool bleReadFloat(BLEDevice peripheral, char serviceUuid[], char charUuid[], flo
 }
 
 //Handles connection to the CO2 gadget
-bool getCO2Data(char addr[], int *sig, float *temp, float *hum, int *co2){
+bool getCO2Data(char addr[], int *sig, int *co2){
   Serial.println("- Discovering peripheral device...");
 
   BLEDevice peripheral;
@@ -231,7 +231,7 @@ bool getCO2Data(char addr[], int *sig, float *temp, float *hum, int *co2){
         return false;
       }
 
-      delay(100); //Sometimes attribute discovery fails without waiting here
+      BLE.poll();
       
       // discover peripheral attributes
       Serial.println("Discovering attributes ...");
@@ -243,11 +243,9 @@ bool getCO2Data(char addr[], int *sig, float *temp, float *hum, int *co2){
         return false;
       }
 
-      delay(100);
+      BLE.poll();
       
-      if(bleReadInt16(peripheral, BLE_UUID_CO2_SERVICE, BLE_UUID_CO2, co2) &
-         bleReadFloat(peripheral, BLE_UUID_TEMP_SERVICE, BLE_UUID_TEMP, temp) & 
-         bleReadFloat(peripheral, BLE_UUID_HUM_SERVICE, BLE_UUID_HUM, hum)){
+      if(bleReadInt16(peripheral, BLE_UUID_CO2_SERVICE, BLE_UUID_CO2, co2)){
         peripheral.disconnect();
         return true;
       }
@@ -260,7 +258,7 @@ bool getCO2Data(char addr[], int *sig, float *temp, float *hum, int *co2){
 }
 
 //Handles connection to the TVOC gadget
-bool getVOCData(char addr[], int *sig, int *voc){
+bool getVOCData(char addr[], int *sig, int *voc, float *temp, float *hum){
   Serial.println("- Discovering peripheral device...");
 
   BLEDevice peripheral;
@@ -293,7 +291,7 @@ bool getVOCData(char addr[], int *sig, int *voc){
         return false;
       }
 
-      delay(100); //Sometimes attribute discovery fails without waiting here
+      BLE.poll();
 
       // discover peripheral attributes
       Serial.println("Discovering attributes ...");
@@ -305,9 +303,11 @@ bool getVOCData(char addr[], int *sig, int *voc){
         return false;
       }
 
-      delay(100);
+      BLE.poll();
       
-      if(bleReadInt(peripheral, BLE_UUID_VOC_SERVICE, BLE_UUID_VOC, voc)){
+      if(bleReadInt(peripheral, BLE_UUID_VOC_SERVICE, BLE_UUID_VOC, voc) & 
+         bleReadFloat(peripheral, BLE_UUID_TEMP_SERVICE, BLE_UUID_TEMP, temp) &
+         bleReadFloat(peripheral, BLE_UUID_HUM_SERVICE, BLE_UUID_HUM, hum)){
         peripheral.disconnect();
         return true;
       }
@@ -353,7 +353,7 @@ bool getSHTData(char addr[], float *temp, float *hum, int *sig, int *batt){
         return false;
       }
 
-      delay(100); //Sometimes attribute discovery fails without waiting here
+      BLE.poll();
       
       // discover peripheral attributes
       Serial.println("Discovering attributes ...");
@@ -365,7 +365,7 @@ bool getSHTData(char addr[], float *temp, float *hum, int *sig, int *batt){
         return false;
       }
 
-      delay(100);
+      BLE.poll();
       
       if(bleReadInt(peripheral, BLE_UUID_BATTERY_SERVICE, BLE_UUID_BATTERY, batt) &
          bleReadFloat(peripheral, BLE_UUID_TEMP_SERVICE, BLE_UUID_TEMP, temp) & 
@@ -396,22 +396,26 @@ void getSensorData(){
     top_update = true;
   }
 
+  BLE.poll();
+
   //Read bottom Gadget
   if (getSHTData(BOTTOM_GADGET, &temperatureBottom, &humidityBottom, &bottomGadgetRSSI, &bottomGadgetBattery)){
     bottom_update = true;
   }
 
+  BLE.poll();
+
   //Read CO2 Gadget
-  if (getCO2Data(CO2_GADGET, &co2RSSI, &temperatureBedroom, &humidityBedroom, &co2Bedroom)){
+  if (getCO2Data(CO2_GADGET, &co2RSSI, &co2Bedroom)){
     co2_update = true;
   }
 
-/*
+  BLE.poll();
+
   //Read VOC Gadget
-  if (getVOCData(VOC_GADGET, &vocRSSI, &vocBathroom)){
+  if (getVOCData(VOC_GADGET, &vocRSSI, &vocBathroom, &temperatureBathroom, &humidityBathroom)){
     voc_update = true;
   }
-*/
 
   BLE.end();
 }
@@ -450,18 +454,18 @@ void sendSensorData(){
       client.print(humidityBottom);
     }
     if(co2_update){
-      client.print("&temperatureBedroom=");
-      client.print(temperatureBedroom);
       client.print("&co2RSSI=");
       client.print(co2RSSI);
-      client.print("&humidityBedroom=");
-      client.print(humidityBedroom);
-      client.print("&co2Bedroom=");
+      client.print("&co2=");
       client.print(co2Bedroom);
     }
     if(voc_update){
       client.print("&vocBathroom=");
       client.print(vocBathroom);
+      client.print("&temperatureBathroom");
+      client.print(temperatureBathroom);
+      client.print("&humidityBathroom");
+      client.print(humidityBathroom);
       client.print("&vocRSSI=");
       client.print(vocRSSI);
     }
