@@ -10,7 +10,7 @@ int keyIndex = 0;            // your network key Index number (needed only for W
 
 //Definitions
 #define HTTP_TIMEOUT 10000 //ms
-#define TX_INTERVAL 60000 //ms
+#define TX_INTERVAL 600000 //ms
 #define BLE_TIMEOUT 20000 //ms
 #define WIFI_TIMEOUT 60000 //ms
 
