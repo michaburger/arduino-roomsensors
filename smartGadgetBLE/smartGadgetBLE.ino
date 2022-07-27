@@ -3,6 +3,10 @@
 #include <WiFiNINA.h>
 #include "arduino_secrets.h"
 
+///There is a compatibility problem between the descriptor of the IAQ Minion
+///and the BLE module. Go to the library (ATT.cpp), discoverAttributes
+//and comment the part of discovering the descriptors.
+
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
 char ssid[] = SECRET_SSID;        // your network SSID (name)
 char pass[] = SECRET_WIFIPASS;    // your network password (use for WPA, or use as key for WEP)
@@ -10,7 +14,7 @@ int keyIndex = 0;            // your network key Index number (needed only for W
 
 //Definitions
 #define HTTP_TIMEOUT 10000 //ms
-#define TX_INTERVAL 60000 //ms
+#define TX_INTERVAL 600000 //ms
 #define BLE_TIMEOUT 20000 //ms
 #define WIFI_TIMEOUT 60000 //ms
 
@@ -47,14 +51,14 @@ char key[] = SECRET_KEY; //Key of Azure Function App
 //Initialize BLE
 #define BLE_UUID_BATTERY_SERVICE          "180F"
 #define BLE_UUID_BATTERY                  "2A19"
-#define BLE_UUID_TEMP_SERVICE             "2234-B38D-4985-720E-0F993A68EE41"   
-#define BLE_UUID_TEMP                     "2235-B38D-4985-720E-0F993A68EE41"
-#define BLE_UUID_HUM_SERVICE              "1234-B38D-4985-720E-0F993A68EE41"
-#define BLE_UUID_HUM                      "1235-B38D-4985-720E-0F993A68EE41"
-#define BLE_UUID_CO2_SERVICE              "7000-B38D-4985-720E-0F993A68EE41"
-#define BLE_UUID_CO2                      "7001-B38D-4985-720E-0F993A68EE41"
-#define BLE_UUID_VOC_SERVICE              "5588-B38D-4985-720E-0F993A68EE41"
-#define BLE_UUID_VOC                      "5582-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_TEMP_SERVICE             "00002234-B38D-4985-720E-0F993A68EE41"   
+#define BLE_UUID_TEMP                     "00002235-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_HUM_SERVICE              "00001234-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_HUM                      "00001235-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_CO2_SERVICE              "00007000-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_CO2                      "00007001-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_VOC_SERVICE              "00005588-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_VOC                      "00005582-B38D-4985-720E-0F993A68EE41"
 
 //Used devices
 #define BOTTOM_GADGET                     "cb:8f:75:a9:72:9f"
@@ -288,28 +292,11 @@ bool getVOCData(char addr[], int *sig, int *voc, float *temp, float *hum){
       }
 
       // discover peripheral attributes
-      Serial.println("Discovering services ...");
-      if (peripheral.discoverService(BLE_UUID_TEMP_SERVICE)){
-        Serial.println("Temperature Service discovered");
-      }
-      else {
-        Serial.println("Temperature Service discovery failed!");
-        peripheral.disconnect();
-        return false;
-      }
-      if (peripheral.discoverService(BLE_UUID_HUM_SERVICE)){
-        Serial.println("Humidity Service discovered");
-      }
-      else {
-        Serial.println("Humidity Service discovery failed!");
-        peripheral.disconnect();
-        return false;
-      }
-      if (peripheral.discoverService(BLE_UUID_VOC_SERVICE)){
-        Serial.println("VOC Service discovered"); 
-      }
-      else {
-        Serial.println("VOC Service discovery failed!");
+      Serial.println("Discovering attributes ...");
+      if (peripheral.discoverAttributes()) {
+        Serial.println("Attributes discovered");
+      } else {
+        Serial.println("Attribute discovery failed!");
         peripheral.disconnect();
         return false;
       }
@@ -400,21 +387,29 @@ void getSensorData(){
   if (getVOCData(VOC_GADGET, &vocRSSI, &vocBathroom, &temperatureBathroom, &humidityBathroom)){
     voc_update = true;
   }
+
+  delay(50);
   
   //Read top Gadget
   if (getSHTData(TOP_GADGET, &temperatureTop, &humidityTop, &topGadgetRSSI, &topGadgetBattery)){
     top_update = true;
   }
 
+  delay(50);
+
   //Read bottom Gadget
   if (getSHTData(BOTTOM_GADGET, &temperatureBottom, &humidityBottom, &bottomGadgetRSSI, &bottomGadgetBattery)){
     bottom_update = true;
   }
 
+  delay(50);
+
   //Read CO2 Gadget
   if (getCO2Data(CO2_GADGET, &co2RSSI, &co2Bedroom)){
     co2_update = true;
   }
+
+  delay(50);
 
   BLE.end();
 }
