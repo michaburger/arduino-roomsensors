@@ -250,6 +250,7 @@ bool getCO2Data(char addr[], int *sig, int *co2){
         return true;
       }
     }
+    delay(10);
   }
 
   //Make sure BLE connection is closed before using WIFI
@@ -308,6 +309,7 @@ bool getVOCData(char addr[], int *sig, int *voc, float *temp, float *hum){
         return true;
       }
     }
+    delay(10);
   }
 
   //Make sure BLE connection is closed before using WIFI
@@ -366,6 +368,7 @@ bool getSHTData(char addr[], float *temp, float *hum, int *sig, int *batt){
         return true;
       }
     }
+    delay(10);
   }
 
   //Make sure BLE connection is closed before using WIFI
@@ -456,9 +459,9 @@ void sendSensorData(){
     if(voc_update){
       client.print("&vocBathroom=");
       client.print(vocBathroom);
-      client.print("&temperatureBathroom");
+      client.print("&temperatureBathroom=");
       client.print(temperatureBathroom);
-      client.print("&humidityBathroom");
+      client.print("&humidityBathroom=");
       client.print(humidityBathroom);
       client.print("&vocRSSI=");
       client.print(vocRSSI);
