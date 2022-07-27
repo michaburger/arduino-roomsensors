@@ -10,7 +10,7 @@ int keyIndex = 0;            // your network key Index number (needed only for W
 
 //Definitions
 #define HTTP_TIMEOUT 10000 //ms
-#define TX_INTERVAL 600000 //ms
+#define TX_INTERVAL 60000 //ms
 #define BLE_TIMEOUT 20000 //ms
 #define WIFI_TIMEOUT 60000 //ms
 
@@ -47,14 +47,14 @@ char key[] = SECRET_KEY; //Key of Azure Function App
 //Initialize BLE
 #define BLE_UUID_BATTERY_SERVICE          "180F"
 #define BLE_UUID_BATTERY                  "2A19"
-#define BLE_UUID_TEMP_SERVICE             "00002234-B38D-4985-720E-0F993A68EE41"   
-#define BLE_UUID_TEMP                     "00002235-B38D-4985-720E-0F993A68EE41"
-#define BLE_UUID_HUM_SERVICE              "00001234-B38D-4985-720E-0F993A68EE41"
-#define BLE_UUID_HUM                      "00001235-B38D-4985-720E-0F993A68EE41"
-#define BLE_UUID_CO2_SERVICE              "00007000-B38D-4985-720E-0F993A68EE41"
-#define BLE_UUID_CO2                      "00007001-B38D-4985-720E-0F993A68EE41"
-#define BLE_UUID_VOC_SERVICE              "00005588-B38D-4985-720E-0F993A68EE41"
-#define BLE_UUID_VOC                      "00005582-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_TEMP_SERVICE             "2234-B38D-4985-720E-0F993A68EE41"   
+#define BLE_UUID_TEMP                     "2235-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_HUM_SERVICE              "1234-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_HUM                      "1235-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_CO2_SERVICE              "7000-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_CO2                      "7001-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_VOC_SERVICE              "5588-B38D-4985-720E-0F993A68EE41"
+#define BLE_UUID_VOC                      "5582-B38D-4985-720E-0F993A68EE41"
 
 //Used devices
 #define BOTTOM_GADGET                     "cb:8f:75:a9:72:9f"
@@ -199,7 +199,7 @@ bool bleReadFloat(BLEDevice peripheral, char serviceUuid[], char charUuid[], flo
 
 //Handles connection to the CO2 gadget
 bool getCO2Data(char addr[], int *sig, int *co2){
-  Serial.println("- Discovering peripheral device...");
+  Serial.println("- Discovering CO2 gadget...");
 
   BLEDevice peripheral;
   BLE.scanForAddress(addr);
@@ -230,8 +230,6 @@ bool getCO2Data(char addr[], int *sig, int *co2){
         peripheral.disconnect();
         return false;
       }
-
-      BLE.poll();
       
       // discover peripheral attributes
       Serial.println("Discovering attributes ...");
@@ -242,8 +240,6 @@ bool getCO2Data(char addr[], int *sig, int *co2){
         peripheral.disconnect();
         return false;
       }
-
-      BLE.poll();
       
       if(bleReadInt16(peripheral, BLE_UUID_CO2_SERVICE, BLE_UUID_CO2, co2)){
         peripheral.disconnect();
@@ -259,7 +255,7 @@ bool getCO2Data(char addr[], int *sig, int *co2){
 
 //Handles connection to the TVOC gadget
 bool getVOCData(char addr[], int *sig, int *voc, float *temp, float *hum){
-  Serial.println("- Discovering peripheral device...");
+  Serial.println("- Discovering VOC gadget...");
 
   BLEDevice peripheral;
   BLE.scanForAddress(addr);
@@ -291,19 +287,32 @@ bool getVOCData(char addr[], int *sig, int *voc, float *temp, float *hum){
         return false;
       }
 
-      BLE.poll();
-
       // discover peripheral attributes
-      Serial.println("Discovering attributes ...");
-      if (peripheral.discoverAttributes()) {
-        Serial.println("Attributes discovered");
-      } else {
-        Serial.println("Attribute discovery failed!");
+      Serial.println("Discovering services ...");
+      if (peripheral.discoverService(BLE_UUID_TEMP_SERVICE)){
+        Serial.println("Temperature Service discovered");
+      }
+      else {
+        Serial.println("Temperature Service discovery failed!");
         peripheral.disconnect();
         return false;
       }
-
-      BLE.poll();
+      if (peripheral.discoverService(BLE_UUID_HUM_SERVICE)){
+        Serial.println("Humidity Service discovered");
+      }
+      else {
+        Serial.println("Humidity Service discovery failed!");
+        peripheral.disconnect();
+        return false;
+      }
+      if (peripheral.discoverService(BLE_UUID_VOC_SERVICE)){
+        Serial.println("VOC Service discovered"); 
+      }
+      else {
+        Serial.println("VOC Service discovery failed!");
+        peripheral.disconnect();
+        return false;
+      }
       
       if(bleReadInt(peripheral, BLE_UUID_VOC_SERVICE, BLE_UUID_VOC, voc) & 
          bleReadFloat(peripheral, BLE_UUID_TEMP_SERVICE, BLE_UUID_TEMP, temp) &
@@ -321,7 +330,7 @@ bool getVOCData(char addr[], int *sig, int *voc, float *temp, float *hum){
 
 //Handles connection to one SHT gadget and readout of data, will fill the data into resp. variables
 bool getSHTData(char addr[], float *temp, float *hum, int *sig, int *batt){
-  Serial.println("- Discovering peripheral device...");
+  Serial.println("- Discovering Humi Gadget...");
 
   BLEDevice peripheral;
   BLE.scanForAddress(addr);
@@ -352,8 +361,6 @@ bool getSHTData(char addr[], float *temp, float *hum, int *sig, int *batt){
         peripheral.disconnect();
         return false;
       }
-
-      BLE.poll();
       
       // discover peripheral attributes
       Serial.println("Discovering attributes ...");
@@ -364,8 +371,6 @@ bool getSHTData(char addr[], float *temp, float *hum, int *sig, int *batt){
         peripheral.disconnect();
         return false;
       }
-
-      BLE.poll();
       
       if(bleReadInt(peripheral, BLE_UUID_BATTERY_SERVICE, BLE_UUID_BATTERY, batt) &
          bleReadFloat(peripheral, BLE_UUID_TEMP_SERVICE, BLE_UUID_TEMP, temp) & 
@@ -391,30 +396,24 @@ void getSensorData(){
     Serial.println("* Starting Bluetooth® Low Energy module failed!");
   }
 
+  //Read VOC Gadget
+  if (getVOCData(VOC_GADGET, &vocRSSI, &vocBathroom, &temperatureBathroom, &humidityBathroom)){
+    voc_update = true;
+  }
+  
   //Read top Gadget
   if (getSHTData(TOP_GADGET, &temperatureTop, &humidityTop, &topGadgetRSSI, &topGadgetBattery)){
     top_update = true;
   }
-
-  BLE.poll();
 
   //Read bottom Gadget
   if (getSHTData(BOTTOM_GADGET, &temperatureBottom, &humidityBottom, &bottomGadgetRSSI, &bottomGadgetBattery)){
     bottom_update = true;
   }
 
-  BLE.poll();
-
   //Read CO2 Gadget
   if (getCO2Data(CO2_GADGET, &co2RSSI, &co2Bedroom)){
     co2_update = true;
-  }
-
-  BLE.poll();
-
-  //Read VOC Gadget
-  if (getVOCData(VOC_GADGET, &vocRSSI, &vocBathroom, &temperatureBathroom, &humidityBathroom)){
-    voc_update = true;
   }
 
   BLE.end();
