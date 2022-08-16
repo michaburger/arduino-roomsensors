@@ -14,29 +14,29 @@ int keyIndex = 0;            // your network key Index number (needed only for W
 
 //Definitions
 #define HTTP_TIMEOUT 10000 //ms
-#define TX_INTERVAL 600000 //ms
+#define TX_INTERVAL 300000 //ms
 #define BLE_TIMEOUT 20000 //ms
 #define WIFI_TIMEOUT 60000 //ms
 
 // Global variables for humidity and temperature fetched
-bool top_update = false;
 bool bottom_update = false;
+bool bathroom_update = false;
 bool co2_update = false;
 bool voc_update = false;
 float temperatureTop = 255;
 float humidityTop = -1;
-float temperatureBottom = 255;
-float humidityBottom = -1;
-int bottomGadgetRSSI = 127;
-int bottomGadgetBattery = -1;
-int topGadgetRSSI = 127;
-int topGadgetBattery = -1;
-int co2RSSI = 127;
-int vocRSSI = 127;
 float temperatureBathroom = 255;
 float humidityBathroom = -1;
-int co2Bedroom = -1;
-int vocBathroom = -1;
+int bathroomGadgetRSSI = 127;
+int bathroomGadgetBattery = -1;
+int bottomGadgetRSSI = 127;
+int bottomGadgetBattery = -1;
+int co2RSSI = 127;
+int vocRSSI = 127;
+float temperatureBottom = 255;
+float humidityBottom = -1;
+int co2Top = -1;
+int vocTop = -1;
 unsigned long delayTimer;
 unsigned long txTimer;
 unsigned long bleTimer;
@@ -61,8 +61,8 @@ char key[] = SECRET_KEY; //Key of Azure Function App
 #define BLE_UUID_VOC                      "00005582-B38D-4985-720E-0F993A68EE41"
 
 //Used devices
-#define BOTTOM_GADGET                     "cb:8f:75:a9:72:9f"
-#define TOP_GADGET                        "e4:1c:4c:00:d9:24"
+#define BATHROOM_GADGET                   "cb:8f:75:a9:72:9f"
+#define BOTTOM_GADGET                     "e4:1c:4c:00:d9:24"
 #define VOC_GADGET                        "e9:da:d0:6c:09:bf"
 #define CO2_GADGET                        "dc:e6:4d:5e:e1:f6"
 
@@ -387,28 +387,28 @@ void getSensorData(){
   }
 
   //Read VOC Gadget
-  if (getVOCData(VOC_GADGET, &vocRSSI, &vocBathroom, &temperatureBathroom, &humidityBathroom)){
+  if (getVOCData(VOC_GADGET, &vocRSSI, &vocTop, &temperatureTop, &humidityTop)){
     voc_update = true;
   }
 
   delay(50);
   
   //Read top Gadget
-  if (getSHTData(TOP_GADGET, &temperatureTop, &humidityTop, &topGadgetRSSI, &topGadgetBattery)){
-    top_update = true;
-  }
-
-  delay(50);
-
-  //Read bottom Gadget
   if (getSHTData(BOTTOM_GADGET, &temperatureBottom, &humidityBottom, &bottomGadgetRSSI, &bottomGadgetBattery)){
     bottom_update = true;
   }
 
   delay(50);
 
+  //Read bottom Gadget
+  if (getSHTData(BATHROOM_GADGET, &temperatureBathroom, &humidityBathroom, &bathroomGadgetRSSI, &bathroomGadgetBattery)){
+    bathroom_update = true;
+  }
+
+  delay(50);
+
   //Read CO2 Gadget
-  if (getCO2Data(CO2_GADGET, &co2RSSI, &co2Bedroom)){
+  if (getCO2Data(CO2_GADGET, &co2RSSI, &co2Top)){
     co2_update = true;
   }
 
@@ -430,16 +430,6 @@ void sendSensorData(){
     client.print(key);
     client.print("&deviceName=");
     client.print(deviceName);
-    if(top_update){
-      client.print("&batteryTop=");
-      client.print(topGadgetBattery);
-      client.print("&rssiTop=");
-      client.print(topGadgetRSSI);
-      client.print("&temperatureTop=");
-      client.print(temperatureTop);
-      client.print("&humidityTop=");
-      client.print(humidityTop);
-    }
     if(bottom_update){
       client.print("&batteryBottom=");
       client.print(bottomGadgetBattery);
@@ -450,19 +440,29 @@ void sendSensorData(){
       client.print("&humidityBottom=");
       client.print(humidityBottom);
     }
-    if(co2_update){
-      client.print("&co2RSSI=");
-      client.print(co2RSSI);
-      client.print("&co2=");
-      client.print(co2Bedroom);
-    }
-    if(voc_update){
-      client.print("&vocBathroom=");
-      client.print(vocBathroom);
+    if(bathroom_update){
+      client.print("&batteryBathroom=");
+      client.print(bathroomGadgetBattery);
+      client.print("&rssiBathroom=");
+      client.print(bathroomGadgetRSSI);
       client.print("&temperatureBathroom=");
       client.print(temperatureBathroom);
       client.print("&humidityBathroom=");
       client.print(humidityBathroom);
+    }
+    if(co2_update){
+      client.print("&co2RSSI=");
+      client.print(co2RSSI);
+      client.print("&co2=");
+      client.print(co2Top);
+    }
+    if(voc_update){
+      client.print("&vocTop=");
+      client.print(vocTop);
+      client.print("&temperatureTop=");
+      client.print(temperatureTop);
+      client.print("&humidityTop=");
+      client.print(humidityTop);
       client.print("&vocRSSI=");
       client.print(vocRSSI);
     }
@@ -503,7 +503,7 @@ void sendSensorData(){
 
   if(server_answer){
     bottom_update = false;
-    top_update = false;
+    bathroom_update = false;
     co2_update = false;
     voc_update = false;
   }
