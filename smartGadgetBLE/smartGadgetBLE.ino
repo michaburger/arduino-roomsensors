@@ -377,13 +377,17 @@ bool getSHTData(char addr[], float *temp, float *hum, int *sig, int *batt){
 }
 
 
-void getSensorData(){
+bool getSensorData(){
   //Get data from all sensor
   WiFi.end();
+  delay(50);
   Serial.println("Starting up BLE module");
   //Setup for BLE
   if (!BLE.begin()) {
+    delay(50);
+    BLE.end();
     Serial.println("* Starting Bluetooth® Low Energy module failed!");
+    return false;
   }
 
   //Read VOC Gadget
@@ -415,6 +419,7 @@ void getSensorData(){
   delay(50);
 
   BLE.end();
+  return true;
 }
 
 
