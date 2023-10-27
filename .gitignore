@@ -1,6 +1,10 @@
 # Secret files
 arduino_secrets.h
 
+# Power point
+*.ppt
+*.pptx
+
 ### C++ ###
 # Prerequisites
 *.d

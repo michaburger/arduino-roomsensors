@@ -14,9 +14,10 @@ int keyIndex = 0;            // your network key Index number (needed only for W
 
 //Definitions
 #define HTTP_TIMEOUT 10000 //ms
-#define TX_INTERVAL 300000 //ms
-#define BLE_TIMEOUT 20000 //ms
+#define TX_INTERVAL 180000 //ms
+#define BLE_TIMEOUT 30000 //ms
 #define WIFI_TIMEOUT 60000 //ms
+#define MAX_TRIES_READ 10
 
 // Global variables for humidity and temperature fetched
 bool bottom_update = false;
@@ -226,7 +227,7 @@ bool getCO2Data(char addr[], int *sig, int *co2){
       Serial.print("RSSI: ");
       Serial.println(peripheral.rssi());
       *sig = peripheral.rssi();
-      
+      delay(10);
       if (peripheral.connect()) {
         Serial.println("Connected");
       } else {
@@ -234,7 +235,7 @@ bool getCO2Data(char addr[], int *sig, int *co2){
         peripheral.disconnect();
         return false;
       }
-      
+      delay(10);
       // discover peripheral attributes
       Serial.println("Discovering attributes ...");
       if (peripheral.discoverAttributes()) {
@@ -244,7 +245,7 @@ bool getCO2Data(char addr[], int *sig, int *co2){
         peripheral.disconnect();
         return false;
       }
-      
+      delay(10);
       if(bleReadInt16(peripheral, BLE_UUID_CO2_SERVICE, BLE_UUID_CO2, co2)){
         peripheral.disconnect();
         return true;
@@ -255,6 +256,7 @@ bool getCO2Data(char addr[], int *sig, int *co2){
 
   //Make sure BLE connection is closed before using WIFI
   peripheral.disconnect();
+  Serial.println("- BLE timeout reached");
   return false;
 }
 
@@ -283,7 +285,7 @@ bool getVOCData(char addr[], int *sig, int *voc, float *temp, float *hum){
       Serial.print("RSSI: ");
       Serial.println(peripheral.rssi());
       *sig = peripheral.rssi();
-      
+      delay(10);
       if (peripheral.connect()) {
         Serial.println("Connected");
       } else {
@@ -291,7 +293,7 @@ bool getVOCData(char addr[], int *sig, int *voc, float *temp, float *hum){
         peripheral.disconnect();
         return false;
       }
-
+      delay(10);
       // discover peripheral attributes
       Serial.println("Discovering attributes ...");
       if (peripheral.discoverAttributes()) {
@@ -301,7 +303,7 @@ bool getVOCData(char addr[], int *sig, int *voc, float *temp, float *hum){
         peripheral.disconnect();
         return false;
       }
-      
+      delay(10);
       if(bleReadInt(peripheral, BLE_UUID_VOC_SERVICE, BLE_UUID_VOC, voc) & 
          bleReadFloat(peripheral, BLE_UUID_TEMP_SERVICE, BLE_UUID_TEMP, temp) &
          bleReadFloat(peripheral, BLE_UUID_HUM_SERVICE, BLE_UUID_HUM, hum)){
@@ -314,6 +316,7 @@ bool getVOCData(char addr[], int *sig, int *voc, float *temp, float *hum){
 
   //Make sure BLE connection is closed before using WIFI
   peripheral.disconnect();
+  Serial.println("- BLE timeout reached");
   return false;
 }
 
@@ -342,6 +345,8 @@ bool getSHTData(char addr[], float *temp, float *hum, int *sig, int *batt){
       Serial.print("RSSI: ");
       Serial.println(peripheral.rssi());
       *sig = peripheral.rssi();
+
+      delay(10);
       
       if (peripheral.connect()) {
         Serial.println("Connected");
@@ -350,6 +355,8 @@ bool getSHTData(char addr[], float *temp, float *hum, int *sig, int *batt){
         peripheral.disconnect();
         return false;
       }
+
+      delay(10);
       
       // discover peripheral attributes
       Serial.println("Discovering attributes ...");
@@ -360,6 +367,8 @@ bool getSHTData(char addr[], float *temp, float *hum, int *sig, int *batt){
         peripheral.disconnect();
         return false;
       }
+
+     delay(10);
       
       if(bleReadInt(peripheral, BLE_UUID_BATTERY_SERVICE, BLE_UUID_BATTERY, batt) &
          bleReadFloat(peripheral, BLE_UUID_TEMP_SERVICE, BLE_UUID_TEMP, temp) & 
@@ -373,6 +382,7 @@ bool getSHTData(char addr[], float *temp, float *hum, int *sig, int *batt){
 
   //Make sure BLE connection is closed before using WIFI
   peripheral.disconnect();
+  Serial.println("- BLE timeout reached");
   return false;
 }
 
@@ -391,29 +401,53 @@ bool getSensorData(){
   }
 
   //Read VOC Gadget
-  if (getVOCData(VOC_GADGET, &vocRSSI, &vocTop, &temperatureTop, &humidityTop)){
-    voc_update = true;
+  for (int i=0; i<MAX_TRIES_READ; i++){
+    if (getVOCData(VOC_GADGET, &vocRSSI, &vocTop, &temperatureTop, &humidityTop)){
+      voc_update = true;
+      i = MAX_TRIES_READ;
+    }
+    else {
+      delay(500*i);
+    }
   }
 
-  delay(50);
+  delay(500);
   
   //Read top Gadget
-  if (getSHTData(BOTTOM_GADGET, &temperatureBottom, &humidityBottom, &bottomGadgetRSSI, &bottomGadgetBattery)){
-    bottom_update = true;
+  for (int i=0; i<MAX_TRIES_READ; i++){
+    if (getSHTData(BOTTOM_GADGET, &temperatureBottom, &humidityBottom, &bottomGadgetRSSI, &bottomGadgetBattery)){
+      bottom_update = true;
+      i = MAX_TRIES_READ;
+    }
+    else {
+      delay(500*i);
+    }
   }
 
-  delay(50);
+  delay(100);
 
   //Read bottom Gadget
-  if (getSHTData(BATHROOM_GADGET, &temperatureBathroom, &humidityBathroom, &bathroomGadgetRSSI, &bathroomGadgetBattery)){
-    bathroom_update = true;
+  for (int i=0; i<MAX_TRIES_READ; i++){
+    if (getSHTData(BATHROOM_GADGET, &temperatureBathroom, &humidityBathroom, &bathroomGadgetRSSI, &bathroomGadgetBattery)){
+      bathroom_update = true;
+      i = MAX_TRIES_READ;
+    }
+    else {
+      delay(500*i);
+    }
   }
 
-  delay(50);
+  delay(100);
 
   //Read CO2 Gadget
-  if (getCO2Data(CO2_GADGET, &co2RSSI, &co2Top)){
-    co2_update = true;
+  for (int i=0; i<MAX_TRIES_READ; i++){
+    if (getCO2Data(CO2_GADGET, &co2RSSI, &co2Top)){
+      co2_update = true;
+      i = MAX_TRIES_READ;
+    }
+    else {
+      delay(500*i);
+    }
   }
 
   delay(50);
